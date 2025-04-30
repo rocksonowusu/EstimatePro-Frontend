@@ -1,24 +1,24 @@
 import axios from 'axios';
 
 // Set the base URL for your Django backend API
-const API_BASE_URL = 'http://192.168.56.64:8000/api';
+const API_BASE_URL = 'https://estimatepro.pythonanywhere.com/api';
 
 // Define the interfaces for estimate item and estimate data
 // Note: The 'description' field holds the material description that will appear in your "Description of Materials" column.
 // If the user selects a material from your predefined list, you can populate this field automatically.
 // Alternatively, if the user types in their own material description, just use that text.
+// Updated EstimateItem interface with unit field
 export interface EstimateItem {
-  description: string; // This is the description shown to the user.
+  description: string;
   quantity: number;
+  unit: string;  // Add this line
   unit_price: number;
   amount: number;
-  // This optional field can be used to track if a predefined material was selected.
-  // If the material is typed in manually, you can ignore this field.
   chosen_material_id?: number;
 }
 
 export interface EstimateData {
-  user_email: string; // Used by backend to look up the UserProfile
+  user_email: string;
   client_name: string;
   estimate_title: string;
   notes: string;
@@ -28,26 +28,25 @@ export interface EstimateData {
   items: EstimateItem[];
 }
 
-export interface Estimate{
-  id:number;
-  client_name:string;
-  estimate_title:string;
-  notes:string;
-  workmanship:string;
+export interface Estimate {
+  id: number;
+  client_name: string;
+  estimate_title: string;
+  notes: string;
+  workmanship: string;
   total_materials: string;
   grand_total: string;
-  created_at:string;
-  items:EstimateItem[];
-  status:string;
+  created_at: string;
+  items: EstimateItem[];
+  status: string;
 }
-
 //function to fetch all estimates
-export const getAllEstimates = async (): Promise<Estimate[]> =>{
-  try{
+export const getAllEstimates = async (): Promise<Estimate[]> => {
+  try {
     const response = await axios.get(`${API_BASE_URL}/all-estimates/`);
     return response.data;
-  }catch(error){
-    throw error
+  } catch (error) {
+    throw error;
   }
 }
 
@@ -70,9 +69,9 @@ export const createEstimate = async (data: EstimateData): Promise<any> => {
 export const downloadEstimatePreview = async (estimateId: number): Promise<Blob> => {
   try {
     const response = await axios.get(`${API_BASE_URL}/estimates/${estimateId}/preview/`, {
-      responseType: 'blob',  // Ensures the binary data is handled correctly
+      responseType: 'blob',
     });
-    return response.data; // The blob can then be saved or passed to a native viewer
+    return response.data;
   } catch (error) {
     throw error;
   }
@@ -82,14 +81,12 @@ export const downloadEstimatePreview = async (estimateId: number): Promise<Blob>
 export interface MaterialDescription {
   id: number;
   name: string;
-  unit: string;
 }
 
 // Function to retrieve a list of predefined material descriptions from the backend.
-// The frontend can display this list to let the user choose a material, and then automatically fill in the description field.
 export const getMaterialDescriptions = async (): Promise<MaterialDescription[]> => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/material-desciptions/`);
+    const response = await axios.get(`${API_BASE_URL}/material-descriptions/`);
     return response.data;
   } catch (error) {
     throw error;

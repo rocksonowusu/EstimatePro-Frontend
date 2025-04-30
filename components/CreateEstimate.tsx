@@ -15,6 +15,7 @@ import {
   ActivityIndicator,
   FlatList
 } from "react-native";
+import { Picker } from '@react-native-picker/picker';
 import { MaterialIcons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import EstimatePreviewModal from './EstimatePreviewModal';
@@ -36,6 +37,7 @@ interface EstimateItem {
   description: string;
   unitPrice: string;
   amount: string;
+  unit: string;
   index?: number;
   chosen_material_id?: number;
 }
@@ -52,6 +54,7 @@ interface EstimateDisplayData {
     description: string;
     quantity: number;
     price: number;
+    unit: string;
     chosen_material_id?: number;
   }[];
   notes: string;
@@ -76,16 +79,67 @@ const CreateEstimate: React.FC<CreateEstimateProps> = ({ onCreated }) => {
   const [createdEstimateId, setCreatedEstimateId] = useState<number | null>(null);
   
   // Items section state
-  const [rows, setRows] = useState<EstimateItem[]>([{ quantity: "", description: "", unitPrice: "", amount: "" }]);
+  const [rows, setRows] = useState<EstimateItem[]>([{ 
+    quantity: "", 
+    description: "", 
+    unitPrice: "", 
+    amount: "", 
+    unit: "pieces" 
+  }]);
   const [editingItem, setEditingItem] = useState<EstimateItem>({
     quantity: "",
     description: "",
+    unit: "pieces",
     unitPrice: "",
     amount: "",
     index: undefined,
     chosen_material_id: undefined
   });
   const [modalVisible, setModalVisible] = useState(false);
+
+  const UNIT_OPTIONS = [
+    { value: 'pieces', label: 'Pieces' },
+    { value: 'meters', label: 'Meters' },
+    { value: 'yards', label: 'Yards' },
+    { value: 'feet', label: 'Feet' },
+    { value: 'coils', label: 'Coils' },
+    { value: 'kg', label: 'Kilograms' },
+    { value: 'boxes', label: 'Boxes' },
+    { value: 'units', label: 'Units' },
+    // Hardware additions
+    { value: 'liters', label: 'Liters' },
+    { value: 'gallons', label: 'Gallons' },
+    { value: 'spools', label: 'Spools' },
+    { value: 'rolls', label: 'Rolls' },
+    { value: 'pairs', label: 'Pairs' },
+    { value: 'sets', label: 'Sets' },
+    { value: 'packs', label: 'Packs' },
+    { value: 'cartons', label: 'Cartons' },
+    { value: 'dozens', label: 'Dozens' },
+    { value: 'bundles', label: 'Bundles' },
+    { value: 'palettes', label: 'Palettes' },
+    { value: 'reels', label: 'Reels' },
+    { value: 'crates', label: 'Crates' },
+    { value: 'tubes', label: 'Tubes' },
+    { value: 'bags', label: 'Bags' },
+    { value: 'cans', label: 'Cans' },
+    { value: 'bars', label: 'Bars' },
+    { value: 'sacks', label: 'Sacks' },
+    // Electrical-specific additions
+    { value: 'squares', label: 'Squares' },  // For electrical panels/outlets
+    { value: 'sheets', label: 'Sheets' },    // For insulation materials
+    { value: 'drum', label: 'Drum' },        // For wire/cable drums
+    { value: 'cases', label: 'Cases' },      // For electrical components
+    { value: 'bottles', label: 'Bottles' },  // For chemicals/lubricants
+    { value: 'jars', label: 'Jars' },        // For small components
+    { value: 'trays', label: 'Trays' },      // For cable trays
+    { value: 'tanks', label: 'Tanks' },      // For liquid storage
+    { value: 'strips', label: 'Strips' },    // For LED strips/connectors
+    { value: 'plates', label: 'Plates' },    // For switch plates
+    { value: 'blocks', label: 'Blocks' },    // For terminal blocks
+    { value: 'cubes', label: 'Cubes' },      // For fuse blocks
+    { value: 'canisters', label: 'Canisters' }
+  ];
   
   // Material suggestions state
   const [materials, setMaterials] = useState<MaterialDescription[]>([]);
@@ -100,25 +154,24 @@ const CreateEstimate: React.FC<CreateEstimateProps> = ({ onCreated }) => {
   // Refs
   const descriptionInputRef = useRef<TextInput>(null);
 
-    // Load user email when component mounts
-    useEffect(() => {
-      const loadUserEmail = async () => {
-        try {
-          const email = await getUserEmail();
-          if (email) {
-            setUserEmail(email);
-          } else {
-            // If no email is found, show prompt
-            setShowEmailPrompt(true);
-          }
-        } catch (error) {
-          console.error('Error loading user email:', error);
+  // Load user email when component mounts
+  useEffect(() => {
+    const loadUserEmail = async () => {
+      try {
+        const email = await getUserEmail();
+        if (email) {
+          setUserEmail(email);
+        } else {
           setShowEmailPrompt(true);
         }
-      };
-      
-      loadUserEmail();
-    }, []);
+      } catch (error) {
+        console.error('Error loading user email:', error);
+        setShowEmailPrompt(true);
+      }
+    };
+    
+    loadUserEmail();
+  }, []);
 
   // Fetch material descriptions when component mounts
   useEffect(() => {
@@ -138,7 +191,6 @@ const CreateEstimate: React.FC<CreateEstimateProps> = ({ onCreated }) => {
     }
   };
 
-  // Filter materials based on user input
   const filterMaterials = (text: string) => {
     if (!text.trim()) {
       setShowSuggestions(false);
@@ -153,9 +205,14 @@ const CreateEstimate: React.FC<CreateEstimateProps> = ({ onCreated }) => {
     setShowSuggestions(filtered.length > 0);
   };
 
-  // Items section functions
   const addRow = () => {
-    const newItem = { quantity: "", description: "", unitPrice: "", amount: "" };
+    const newItem = { 
+      quantity: "", 
+      description: "", 
+      unitPrice: "", 
+      amount: "", 
+      unit: "pieces" 
+    };
     setRows([...rows, newItem]);
     setEditingItem(newItem);
     setModalVisible(true);
@@ -172,7 +229,6 @@ const CreateEstimate: React.FC<CreateEstimateProps> = ({ onCreated }) => {
   const updateRow = (index: number, key: keyof EstimateItem, value: string) => {
     const newRows = [...rows];
     
-    // Explicitly type the property access and assignment
     if (key === "quantity" || key === "description" || key === "unitPrice" || key === "amount") {
       newRows[index][key] = value;
     }
@@ -188,12 +244,13 @@ const CreateEstimate: React.FC<CreateEstimateProps> = ({ onCreated }) => {
 
   const editItem = (item: EstimateItem, index: number) => {
     setEditingItem({ 
-        quantity: item.quantity || "",
-        description: item.description || "",
-        unitPrice: item.unitPrice || "",
-        amount: item.amount || "",
-        chosen_material_id: item.chosen_material_id,
-        index
+      quantity: item.quantity || "",
+      description: item.description || "",
+      unitPrice: item.unitPrice || "",
+      amount: item.amount || "",
+      unit: item.unit || "pieces",
+      chosen_material_id: item.chosen_material_id,
+      index
     });
     setModalVisible(true);
   };
@@ -217,23 +274,18 @@ const CreateEstimate: React.FC<CreateEstimateProps> = ({ onCreated }) => {
 
   const saveItemChanges = () => {
     if (editingItem.index !== undefined) {
-      // Validate quantity and price
-      if (!editingItem.quantity || !editingItem.description || !editingItem.unitPrice) {
-        Alert.alert("Required Fields", "Please fill in all fields before saving.");
-        return;
-      }
-
       const index = editingItem.index;
       const newRows = [...rows];
-      
+    
       newRows[index] = {
         quantity: editingItem.quantity || "",
         description: editingItem.description || "",
         unitPrice: editingItem.unitPrice || "",
         amount: editingItem.amount || "",
+        unit: editingItem.unit || "pieces",
         chosen_material_id: editingItem.chosen_material_id
       };
-      
+    
       setRows(newRows);
       setModalVisible(false);
       setEditingItem({
@@ -242,7 +294,8 @@ const CreateEstimate: React.FC<CreateEstimateProps> = ({ onCreated }) => {
         unitPrice: "",
         amount: "",
         index: undefined,
-        chosen_material_id: undefined
+        chosen_material_id: undefined,
+        unit: "pieces"
       });
       setShowSuggestions(false);
     } else {
@@ -260,16 +313,13 @@ const CreateEstimate: React.FC<CreateEstimateProps> = ({ onCreated }) => {
     return (materialsTotal + workmanship).toFixed(2);
   };
 
-  // Calculate total
   const calculateTotal = () => {
     return rows.reduce((total, item) => {
-      return total + (parseFloat(item.amount) || 0);
+      return total + (parseFloat(item.amount)) || 0;
     }, 0).toFixed(2);
   };
 
-  // Function to prepare and show the estimate preview
   const handlePreviewEstimate = async () => {
-    // Validate form
     if (!clientName.trim()) {
       Alert.alert("Missing Information", "Please enter a client name.");
       return;
@@ -288,16 +338,15 @@ const CreateEstimate: React.FC<CreateEstimateProps> = ({ onCreated }) => {
     try {
       setIsLoading(true);
       
-      // Prepare data for API
       const formattedItems: ApiEstimateItem[] = rows.map(row => ({
         description: row.description,
         quantity: parseFloat(row.quantity) || 0,
         unit_price: parseFloat(row.unitPrice) || 0,
         amount: parseFloat(row.amount) || 0,
+        unit: row.unit || 'pieces',
         chosen_material_id: row.chosen_material_id
       }));
 
-      // Create estimate data object for API
       const estimateData: ApiEstimateData = {
         user_email: userEmail,
         client_name: clientName,
@@ -309,20 +358,18 @@ const CreateEstimate: React.FC<CreateEstimateProps> = ({ onCreated }) => {
         items: formattedItems
       };
 
-      // Send to API
       const response = await createEstimate(estimateData);
       setCreatedEstimateId(response.id);
       
-      // Create formatted data for preview
       const displayItems = formattedItems.map(item => ({
         name: item.description,
         description: item.description,
         quantity: item.quantity,
         price: item.unit_price,
+        unit: item.unit,
         chosen_material_id: item.chosen_material_id
       }));
       
-      // Create display data for preview modal
       const estimateDisplayData: EstimateDisplayData = {
         id: `EST-${response.id || Math.floor(100000 + Math.random() * 900000)}`,
         client: clientName,
@@ -338,14 +385,9 @@ const CreateEstimate: React.FC<CreateEstimateProps> = ({ onCreated }) => {
       };
 
       setIsLoading(false);
-      // Close the item editing modal if it's open
       setModalVisible(false);
-      
-      // Set the current estimate data and show the preview
       setCurrentEstimate(estimateDisplayData);
       setPreviewModalVisible(true);
-
-      // Call the onCreated callback
       onCreated();
     } catch (error) {
       setIsLoading(false);
@@ -354,15 +396,12 @@ const CreateEstimate: React.FC<CreateEstimateProps> = ({ onCreated }) => {
     }
   };
 
-  // Function to handle PDF download
-  // Function to handle PDF download and sharing
   const handleDownloadPdf = async (onClose?: () => void) => {
     if (!createdEstimateId) {
       Alert.alert("Error", "No estimate created yet");
       return;
     }
   
-    // Close the modal if callback provided
     if (onClose) {
       onClose();
     }
@@ -370,34 +409,27 @@ const CreateEstimate: React.FC<CreateEstimateProps> = ({ onCreated }) => {
     try {
       setIsLoading(true);
       
-      // Make the API request
-      const API_BASE_URL = 'http://192.168.65.64:8000/api';
+      const API_BASE_URL = 'https://estimatepro.pythonanywhere.com/api';
       const response = await axios.get(`${API_BASE_URL}/estimates/${createdEstimateId}/preview/`, {
         responseType: 'arraybuffer',
       });
       
-      // Convert the arraybuffer directly to base64
       const base64String = Buffer.from(response.data).toString('base64');
-      
-      // Create a temporary file path for the PDF
       const fileName = `estimate_${createdEstimateId}.pdf`;
       const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
       
-      // Write the base64 file
       await FileSystem.writeAsStringAsync(fileUri, base64String, {
         encoding: FileSystem.EncodingType.Base64,
       });
       
       setIsLoading(false);
       
-      // Check if sharing is available
       const isSharingAvailable = await Sharing.isAvailableAsync();
       if (isSharingAvailable) {
-        // Share the file
         await Sharing.shareAsync(fileUri, {
           mimeType: 'application/pdf',
           dialogTitle: 'Share Estimate PDF',
-          UTI: 'com.adobe.pdf', // for iOS
+          UTI: 'com.adobe.pdf',
         });
       } else {
         Alert.alert(
@@ -411,62 +443,60 @@ const CreateEstimate: React.FC<CreateEstimateProps> = ({ onCreated }) => {
       Alert.alert("Error", "Failed to download or share PDF. Please try again.");
     }
   };
-    // Add this modal to prompt for email if not found
-    const renderEmailPrompt = () => (
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={showEmailPrompt}
-        onRequestClose={() => {
-          // Don't allow closing without entering email
-        }}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Enter Your Email</Text>
+
+  const renderEmailPrompt = () => (
+    <Modal
+      animationType="slide"
+      transparent={true}
+      visible={showEmailPrompt}
+      onRequestClose={() => {}}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Enter Your Email</Text>
+          </View>
+          
+          <View style={styles.modalForm}>
+            <Text style={styles.modalText}>
+              Please provide your email to continue. All estimates will be associated with this email.
+            </Text>
+            <View style={styles.formGroup}>
+              <Text style={styles.inputLabel}>Email</Text>
+              <TextInput 
+                style={styles.input}
+                value={userEmail}
+                onChangeText={setUserEmail}
+                placeholder="Enter your email"
+                placeholderTextColor="#A0AEC0"
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
             </View>
             
-            <View style={styles.modalForm}>
-              <Text style={styles.modalText}>
-                Please provide your email to continue. All estimates will be associated with this email.
-              </Text>
-              <View style={styles.formGroup}>
-                <Text style={styles.inputLabel}>Email</Text>
-                <TextInput 
-                  style={styles.input}
-                  value={userEmail}
-                  onChangeText={setUserEmail}
-                  placeholder="Enter your email"
-                  placeholderTextColor="#A0AEC0"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                />
-              </View>
-              
-              <TouchableOpacity 
-                style={styles.saveItemButton} 
-                onPress={async () => {
-                  if (userEmail.trim() !== '') {
-                    await saveUserEmail(userEmail);
-                    setShowEmailPrompt(false);
-                  } else {
-                    Alert.alert("Required", "Please enter your email address");
-                  }
-                }}
+            <TouchableOpacity 
+              style={styles.saveItemButton} 
+              onPress={async () => {
+                if (userEmail.trim() !== '') {
+                  await saveUserEmail(userEmail);
+                  setShowEmailPrompt(false);
+                } else {
+                  Alert.alert("Required", "Please enter your email address");
+                }
+              }}
+            >
+              <LinearGradient
+                colors={['#6C5CE7', '#8E5CE7']}
+                style={styles.saveItemButtonGradient}
               >
-                <LinearGradient
-                  colors={['#6C5CE7', '#8E5CE7']}
-                  style={styles.saveItemButtonGradient}
-                >
-                  <Text style={styles.saveItemButtonText}>Continue</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
+                <Text style={styles.saveItemButtonText}>Continue</Text>
+              </LinearGradient>
+            </TouchableOpacity>
           </View>
         </View>
-      </Modal>
-    );
+      </View>
+    </Modal>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -569,7 +599,7 @@ const CreateEstimate: React.FC<CreateEstimateProps> = ({ onCreated }) => {
                     <View style={styles.itemDetails}>
                       <View style={styles.itemDetail}>
                         <Text style={styles.itemDetailLabel}>Qty</Text>
-                        <Text style={styles.itemDetailValue}>{item.quantity || "0"}</Text>
+                        <Text style={styles.itemDetailValue}>{item.quantity || "0"} ({item.unit})</Text>
                       </View>
                       <View style={styles.itemDetail}>
                         <Text style={styles.itemDetailLabel}>Unit Price</Text>
@@ -702,11 +732,10 @@ const CreateEstimate: React.FC<CreateEstimateProps> = ({ onCreated }) => {
                     </TouchableOpacity>
                   )}
                   
-                  {/* Material suggestions dropdown */}
                   {showSuggestions && (
                     <View style={styles.suggestionsContainer}>
                       <FlatList
-                        data={filteredMaterials.slice(0, 5)} // Limit to 5 suggestions
+                        data={filteredMaterials.slice(0, 5)}
                         keyExtractor={(item) => item.id.toString()}
                         renderItem={({ item }) => (
                           <TouchableOpacity 
@@ -714,7 +743,6 @@ const CreateEstimate: React.FC<CreateEstimateProps> = ({ onCreated }) => {
                             onPress={() => selectMaterial(item)}
                           >
                             <Text style={styles.suggestionText}>{item.name}</Text>
-                            <Text style={styles.suggestionUnit}>{item.unit}</Text>
                           </TouchableOpacity>
                         )}
                         ListEmptyComponent={() => (
@@ -725,7 +753,7 @@ const CreateEstimate: React.FC<CreateEstimateProps> = ({ onCreated }) => {
                   )}
                 </View>
               </View>
-              
+
               <View style={styles.formRow}>
                 <View style={[styles.formGroup, {flex: 1, marginRight: 10}]}>
                   <Text style={styles.inputLabel}>Quantity</Text>
@@ -734,7 +762,7 @@ const CreateEstimate: React.FC<CreateEstimateProps> = ({ onCreated }) => {
                     value={editingItem?.quantity || ""}
                     onChangeText={(text) => {
                       const qty = text || "";
-                      const price = parseFloat(editingItem.unitPrice || "0") || 0;
+                      const price = parseFloat(editingItem?.unitPrice || "0") || 0;
                       const amount = (parseFloat(qty) * price).toFixed(2);
                       setEditingItem({
                         ...editingItem,
@@ -747,9 +775,35 @@ const CreateEstimate: React.FC<CreateEstimateProps> = ({ onCreated }) => {
                     placeholderTextColor="#A0AEC0"
                   />
                 </View>
-                
+
+                <View style={[styles.formGroup, {flex: 1, marginRight: 10}]}>
+                  <Text style={styles.inputLabel}>Unit</Text>
+                  <View style={[styles.pickerContainer, Platform.OS === 'android' && styles.androidPickerContainer]}>
+                    <Picker
+                      selectedValue={editingItem?.unit || 'pieces'}
+                      onValueChange={(itemValue) => {
+                        setEditingItem(prev => ({
+                          ...prev,
+                          unit: itemValue
+                        }));
+                      }}
+                      mode="dropdown"
+                      dropdownIconColor="#64748B"
+                      style={styles.picker}
+                    >
+                      {UNIT_OPTIONS.map(option => (
+                        <Picker.Item 
+                          key={option.value} 
+                          label={option.label} 
+                          value={option.value} 
+                        />
+                      ))}
+                    </Picker>
+                  </View>
+                </View>
+
                 <View style={[styles.formGroup, {flex: 1.5}]}>
-                  <Text style={styles.inputLabel}>Unit Price ($)</Text>
+                  <Text style={styles.inputLabel}>Unit Price (GHC)</Text>
                   <TextInput 
                     style={styles.input}
                     value={editingItem?.unitPrice || ""}
@@ -773,7 +827,7 @@ const CreateEstimate: React.FC<CreateEstimateProps> = ({ onCreated }) => {
               <View style={styles.amountPreview}>
                 <Text style={styles.amountPreviewLabel}>Amount:</Text>
                 <Text style={styles.amountPreviewValue}>
-                  ${parseFloat(editingItem?.amount || "0").toFixed(2)}
+                  GHC{parseFloat(editingItem?.amount || "0").toFixed(2)}
                 </Text>
               </View>
               
@@ -802,6 +856,9 @@ const CreateEstimate: React.FC<CreateEstimateProps> = ({ onCreated }) => {
         estimateData={currentEstimate}
         onDownloadPdf={() => handleDownloadPdf(() => setPreviewModalVisible(false))}
       />
+      
+      {/* Email Prompt Modal */}
+      {renderEmailPrompt()}
     </SafeAreaView>
   );
 };
@@ -850,6 +907,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
+  pickerContainer: {
+    backgroundColor: '#F1F5F9',
+    borderRadius: 12,
+    overflow: 'hidden',
+    height: 50,
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  androidPickerContainer: {
+    height: 48,
+    paddingHorizontal: 8,
+  },
+  picker: {
+    width: '100%',
+    height: '100%',
+    color: '#1E293B',
+  },
   sectionLabel: {
     fontSize: 16,
     fontWeight: '600',
@@ -858,6 +933,28 @@ const styles = StyleSheet.create({
   formGroup: {
     gap: 6,
     marginBottom: 12,
+  },
+  unitSelector: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  unitOption: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
+  },
+  unitOptionSelected: {
+    backgroundColor: '#6C5CE7',
+  },
+  unitOptionText: {
+    fontSize: 14,
+    color: '#64748B',
+  },
+  unitOptionTextSelected: {
+    color: '#FFFFFF',
   },
   inputLabel: {
     fontSize: 14,
@@ -1069,7 +1166,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  // New styles for material suggestions
   autocompleteContainer: {
     position: 'relative',
     zIndex: 1,
@@ -1118,7 +1214,6 @@ const styles = StyleSheet.create({
     right: 16,
     top: 12,
   },
-  // Loading overlay
   loadingOverlay: {
     position: 'absolute',
     top: 0,

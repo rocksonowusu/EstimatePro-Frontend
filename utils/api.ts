@@ -2,7 +2,7 @@
 import axios from 'axios';
 import { getUserEmail } from './userStore';
 
-const API_BASE_URL = 'http://192.168.56.64:8000/api'; // Replace with your actual API URL
+const API_BASE_URL = 'https://estimatepro.pythonanywhere.com/api'; // Replace with your actual API URL
 
 // Configure axios instance
 const api = axios.create({

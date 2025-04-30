@@ -10,9 +10,9 @@ import {
   Dimensions,
   Alert,
   ActivityIndicator,
-  ScrollView,
   Modal,
-  Image
+  Image,
+  RefreshControl // Import RefreshControl component
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { 
@@ -31,7 +31,7 @@ import { getUserEmail } from '../../utils/userStore';
 const { width } = Dimensions.get('window');
 
 // Define the API base URL
-const API_BASE_URL = 'http://192.168.56.64:8000/api';
+const API_BASE_URL = 'https://estimatepro.pythonanywhere.com/api';
 
 // Define the interfaces based on the backend models
 interface EstimateItem {
@@ -83,15 +83,24 @@ interface UserProfileData {
   business_name?: string;
 }
 
+// Pagination configuration
+const ITEMS_PER_PAGE = 5; // Number of estimates to show per page
+
 export default function History() {
   const router = useRouter();
   const [estimates, setEstimates] = useState<Estimate[]>([]);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false); // New state for refresh control
   const [selectedEstimate, setSelectedEstimate] = useState<EstimateDisplayData | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
   const [filterStatus, setFilterStatus] = useState('all');
   const [showEstimateModal, setShowEstimateModal] = useState(false);
+  
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [paginatedEstimates, setPaginatedEstimates] = useState<Estimate[]>([]);
+  const [totalPages, setTotalPages] = useState(1);
   
   const [userProfile, setUserProfile] = useState<UserProfileData>({
     online_name: "Your Business",
@@ -105,6 +114,21 @@ export default function History() {
     fetchEstimates();
     fetchUserProfile();
   }, []);
+
+  // Update paginated estimates whenever estimates or current page changes
+  useEffect(() => {
+    updatePaginatedEstimates();
+  }, [estimates, currentPage, filterStatus]);
+
+  const updatePaginatedEstimates = () => {
+    const filteredEstimates = getFilteredEstimates();
+    setTotalPages(Math.ceil(filteredEstimates.length / ITEMS_PER_PAGE));
+    
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    const endIndex = startIndex + ITEMS_PER_PAGE;
+    
+    setPaginatedEstimates(filteredEstimates.slice(startIndex, endIndex));
+  };
 
   const fetchUserProfile = async () => {
     try {
@@ -140,15 +164,23 @@ export default function History() {
         status: est.status || ['pending', 'sent', 'accepted'][Math.floor(Math.random() * 3)]
       }));
       setEstimates(estimatesWithStatus);
+      // Reset to page 1 when new estimates are fetched
+      setCurrentPage(1);
     } catch (error) {
       console.error('Error fetching estimates:', error);
       Alert.alert('Error', 'Failed to load estimates. Please try again later.');
     } finally {
       setLoading(false);
+      setRefreshing(false); // Make sure to stop refreshing state
     }
   };
 
-  
+  // New function to handle pull-to-refresh
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([fetchEstimates(), fetchUserProfile()]);
+  };
+
   const formatEstimateForDisplay = (estimate: Estimate): EstimateDisplayData => {
     return {
       id: `EST-${estimate.id}`,
@@ -171,11 +203,23 @@ export default function History() {
     };
   };
 
-
   const handleEstimatePress = (estimate: Estimate) => {
     const formattedEstimate = formatEstimateForDisplay(estimate);
     setSelectedEstimate(formattedEstimate);
     setModalVisible(true);
+  };
+
+  // Pagination handlers
+  const handleNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+
+  const handlePrevPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
   };
 
   // Function to handle PDF download and sharing
@@ -251,7 +295,7 @@ export default function History() {
     router.back();
   };
 
-  const goToProfile = () =>{
+  const goToProfile = () => {
     router.replace('/settings')
   }
 
@@ -271,38 +315,6 @@ export default function History() {
     return estimates.filter(est => est.status === filterStatus);
   };
 
-  // Render status badge with proper colors
-  // const renderStatusBadge = (status: string) => {
-  //   let colors;
-  //   let iconName;
-  
-  //   switch (status) {
-  //     case 'sent':
-  //       colors = ['#6C5CE7', '#8E5CE7'];
-  //       iconName = 'paper-plane';
-  //       break;
-  //     case 'accepted':
-  //       colors = ['#00B894', '#00CEC9'];
-  //       iconName = 'checkmark-circle';
-  //       break;
-  //     default:
-  //       colors = ['#B2BEC3', '#DFE6E9'];
-  //       iconName = 'hourglass';
-  //   }
-    
-  //   return (
-  //     <LinearGradient
-  //       colors={colors}
-  //       style={styles.statusBadge}
-  //       start={{ x: 0, y: 0 }}
-  //       end={{ x: 1, y: 1 }}
-  //     >
-  //       <Ionicons name={iconName} size={12} color="#FFFFFF" style={styles.statusIcon} />
-  //       <Text style={styles.statusText}>{status}</Text>
-  //     </LinearGradient>
-  //   );
-  // };
-
   // Generate initials for profile avatar
   const getInitials = (name: string) => {
     if (!name) return "YB";
@@ -315,22 +327,70 @@ export default function History() {
   };
 
   // Calculate total statistics
- // Calculate total amount across all estimates
- const getTotalAmount = () => {
-  if (!estimates || estimates.length === 0) return "0.00";
-  const total = estimates.reduce((sum, est) => {
-    // Convert the grand_total to a number (if it's a string)
-    const grandTotal = parseFloat(est.grand_total as any) || 0;
-    return sum + grandTotal;
-  }, 0);
-  return total.toFixed(2);
-};
+  const getTotalAmount = () => {
+    if (!estimates || estimates.length === 0) return "0.00";
+    const total = estimates.reduce((sum, est) => {
+      // Convert the grand_total to a number (if it's a string)
+      const grandTotal = parseFloat(est.grand_total as any) || 0;
+      return sum + grandTotal;
+    }, 0);
+    return total.toFixed(2);
+  };
 
   const getEstimateCount = () => {
     return estimates.length;
   };
   
-  
+  // Render pagination buttons
+  const renderPaginationControls = () => {
+    if (getFilteredEstimates().length <= ITEMS_PER_PAGE) return null;
+    
+    return (
+      <View style={styles.paginationContainer}>
+        <TouchableOpacity 
+          style={[
+            styles.paginationButton, 
+            currentPage === 1 && styles.paginationButtonDisabled
+          ]}
+          onPress={handlePrevPage}
+          disabled={currentPage === 1}
+        >
+          <MaterialIcons 
+            name="chevron-left" 
+            size={24} 
+            color={currentPage === 1 ? "#CBD5E0" : "#6C5CE7"} 
+          />
+          <Text style={[
+            styles.paginationButtonText,
+            currentPage === 1 && styles.paginationButtonTextDisabled
+          ]}>Previous</Text>
+        </TouchableOpacity>
+        
+        <Text style={styles.paginationInfo}>
+          Page {currentPage} of {totalPages}
+        </Text>
+        
+        <TouchableOpacity 
+          style={[
+            styles.paginationButton, 
+            currentPage === totalPages && styles.paginationButtonDisabled
+          ]}
+          onPress={handleNextPage}
+          disabled={currentPage === totalPages}
+        >
+          <Text style={[
+            styles.paginationButtonText,
+            currentPage === totalPages && styles.paginationButtonTextDisabled
+          ]}>Next</Text>
+          <MaterialIcons 
+            name="chevron-right" 
+            size={24} 
+            color={currentPage === totalPages ? "#CBD5E0" : "#6C5CE7"} 
+          />
+        </TouchableOpacity>
+      </View>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -346,13 +406,13 @@ export default function History() {
 
       {/* Header */}
       <View style={styles.header}>
-      <View>
-        <Text style={styles.greeting}>Hello there,</Text>
-        <Text style={styles.businessName}>
-          {userProfile?.online_name ? userProfile.online_name : "Your Business"}
-        </Text>
-      </View>
-      <TouchableOpacity style={styles.profileButton} onPress = {goToProfile}>
+        <View>
+          <Text style={styles.greeting}>Hello there,</Text>
+          <Text style={styles.businessName}>
+            {userProfile?.online_name ? userProfile.online_name : "Your Business"}
+          </Text>
+        </View>
+        <TouchableOpacity style={styles.profileButton} onPress={goToProfile}>
           <LinearGradient
             colors={['#6C5CE7', '#8E5CE7']}
             style={styles.profileGradient}
@@ -361,8 +421,8 @@ export default function History() {
               {getInitials(userProfile?.online_name || "User")}
             </Text>
           </LinearGradient>
-      </TouchableOpacity>
-    </View>
+        </TouchableOpacity>
+      </View>
 
       {/* Summary Section */}
       <View style={styles.summarySection}>
@@ -390,11 +450,8 @@ export default function History() {
         </LinearGradient>
       </View>
 
-      {/* Filter Tabs */}
-      
-
       {/* Estimate List */}
-      {loading ? (
+      {loading && !refreshing ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#6C5CE7" />
           <Text style={styles.loadingText}>Loading estimates...</Text>
@@ -402,7 +459,7 @@ export default function History() {
       ) : (
         <>
           <FlatList
-            data={getFilteredEstimates()}
+            data={paginatedEstimates}
             keyExtractor={(item) => item.id.toString()}
             renderItem={({ item }) => {
               // Safely get the grand total value
@@ -420,7 +477,6 @@ export default function History() {
                 >
                   <View style={styles.itemTopRow}>
                     <Text style={styles.clientName}>{item.client_name}</Text>
-                    {/* {renderStatusBadge(item.status || 'pending')} */}
                   </View>
                   <Text style={styles.estimateTitle}>{item.estimate_title}</Text>
                   <View style={styles.itemBottomRow}>
@@ -434,6 +490,7 @@ export default function History() {
               );
             }}
             contentContainerStyle={styles.flatListContent}
+            ListFooterComponent={renderPaginationControls}
             ListEmptyComponent={
               <View style={styles.emptyStateContainer}>
                 <MaterialIcons name="receipt-long" size={64} color="#CBD5E0" />
@@ -453,6 +510,17 @@ export default function History() {
                   </LinearGradient>
                 </TouchableOpacity>
               </View>
+            }
+            // Add RefreshControl component here
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={["#6C5CE7", "#8E5CE7"]} // Android refresh indicator colors
+                tintColor="#6C5CE7" // iOS refresh indicator color
+                title="Refreshing..." // iOS refresh indicator title
+                titleColor="#6C5CE7" // iOS refresh indicator title color
+              />
             }
           />
 
@@ -491,11 +559,11 @@ export default function History() {
       {/* Preview Modal */}
       {selectedEstimate && (
         <EstimatePreviewModal
-        visible={modalVisible}
-        onClose={() => setModalVisible(false)}
-        estimateData={selectedEstimate}
-        onDownloadPdf={() => handleDownloadPdf(() => setModalVisible(false))}
-      />
+          visible={modalVisible}
+          onClose={() => setModalVisible(false)}
+          estimateData={selectedEstimate}
+          onDownloadPdf={() => handleDownloadPdf(() => setModalVisible(false))}
+        />
       )}
     </SafeAreaView>
   );
@@ -607,29 +675,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginLeft: 2,
   },
-  tabsContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-    flexDirection: 'row',
-  },
-  filterTab: {
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: '#F1F5F9',
-    marginRight: 12,
-  },
-  activeFilterTab: {
-    backgroundColor: '#6C5CE7',
-  },
-  filterTabText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#64748B',
-  },
-  activeFilterTabText: {
-    color: '#FFFFFF',
-  },
   flatListContent: {
     padding: 20,
     paddingBottom: 100,
@@ -679,22 +724,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#1E293B',
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-  },
-  statusIcon: {
-    marginRight: 4,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#FFFFFF',
-    textTransform: 'capitalize',
   },
   loadingContainer: {
     flex: 1,
@@ -767,5 +796,40 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 28,
+  },
+  // Pagination styles
+  paginationContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 8,
+    marginTop: 8,
+  },
+  paginationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
+  },
+  paginationButtonDisabled: {
+    backgroundColor: '#EEF2F6',
+    opacity: 0.7,
+  },
+  paginationButtonText: {
+    fontSize: 14,
+    color: '#6C5CE7',
+    fontWeight: '500',
+    marginHorizontal: 4,
+  },
+  paginationButtonTextDisabled: {
+    color: '#CBD5E0',
+  },
+  paginationInfo: {
+    fontSize: 14,
+    color: '#64748B',
+    fontWeight: '500',
   },
 });

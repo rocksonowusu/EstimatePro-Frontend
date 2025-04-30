@@ -2,7 +2,7 @@ import axios from 'axios';
 import {saveUserEmail} from '../utils/userStore'
 
 // Set your Django backend base URL (adjust if needed)
-const BASE_URL = 'http://192.168.56.64:8000/api';
+const BASE_URL = 'https://estimatepro.pythonanywhere.com/api';
 
 // Define an interface for the onboarding data
 export interface OnboardingData {
